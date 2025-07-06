@@ -1,0 +1,48 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.env/
+.env.bak/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Environment variables
+.env
+*.env
+
+# Flask cache / logs
+instance/
+*.db
+*.sqlite3
+*.log
+
+# Flask specific
+*.pyc
+*.pyo
+*.pyd
+
+# VSCode / IDEs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Docker
+*.pid
+*.tar
+*.bak
+*.old
+docker-compose.override.yml
+
+# OS generated files
+ehthumbs.db
+Icon?

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Domain Analyzer</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .box { max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; }
+        .status { font-size: 1.2rem; margin-top: 20px; }
+        .reasoning, .whynot { margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h2>🔍 Domain Analyzer</h2>
+        <form method="POST">
+            <input type="text" name="domain" placeholder="Enter domain (e.g. example.com)" required style="width: 100%; padding: 10px; margin-top: 10px;">
+            <button type="submit" style="margin-top: 10px;">Analyze</button>
+        </form>
+
+        {% if result %}
+            <div class="status">
+                <p><strong>URL:</strong> {{ result.URL }}</p>
+                <p><strong>Status:</strong> {{ result.Status }}</p>
+                <p><strong>Confidence:</strong> {{ result.Confidence }}%</p>
+
+                <div class="reasoning">
+                    <strong>Reasoning:</strong>
+                    <ul>
+                        {% for reason in result.Reasoning %}
+                            <li>{{ reason }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+
+                {% if result.WhyNot100 %}
+                    <div class="whynot">
+                        <strong>Why not 100%?</strong>
+                        <ul>
+                            {% for reason in result.WhyNot100 %}
+                                <li>{{ reason }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+</body>
+</html>
