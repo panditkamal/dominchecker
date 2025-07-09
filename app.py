@@ -2,6 +2,7 @@ from flask import Flask, request, render_template
 import requests
 from bs4 import BeautifulSoup
 import socket
+import whois
 
 app = Flask(__name__)
 
@@ -9,71 +10,78 @@ def analyze_domain(domain):
     url = f"http://{domain}"
     result = {
         "URL": domain,
-        "Status": "🟠 Unknown",
-        "Confidence": 50,
-        "Reasoning": [],
-        "WhyNot100": []
+        "Status": "❓ Need Manual Check",
+        "Reasoning": []
     }
 
     try:
+        # WHOIS check
+        try:
+            w = whois.whois(domain)
+            if not w.domain_name:
+                result["Status"] = "❓ Need Manual Check"
+                result["Reasoning"].append("Domain not registered (WHOIS check).")
+                return result
+        except Exception:
+            result["Status"] = "❓ Need Manual Check"
+            result["Reasoning"].append("WHOIS check failed.")
+            return result
+
+        # DNS resolution
         try:
             socket.gethostbyname(domain)
         except socket.gaierror:
-            result["Status"] = "❌ Unregistered or Invalid"
-            result["Confidence"] = 100
-            result["Reasoning"].append("• Domain did not resolve (DNS failure)")
+            result["Status"] = "❓ Need Manual Check"
+            result["Reasoning"].append("DNS resolution failed.")
             return result
 
-        res = requests.get(url, timeout=8)
-        html = res.text
+        # Fetching the page
+        res = requests.get(url, timeout=10, allow_redirects=True)
+        html = res.text.lower()
         soup = BeautifulSoup(html, "html.parser")
-        title = soup.title.string.lower() if soup.title else ""
-        body_text = soup.get_text().lower()
+        body_text = soup.get_text(separator=" ").lower()
         full_url = res.url.lower()
 
-        if res.history:
-            status_codes = [h.status_code for h in res.history]
-            if any(code in [301, 302] for code in status_codes):
-                result["Reasoning"].append(f"• Redirected ({status_codes[-1]}) to {res.url}")
-                result["WhyNot100"].append("• Redirect may mask original content")
-
-        sale_keywords = [
+        # Landing / parked / sale page patterns
+        landing_keywords = [
             "buy this domain", "domain for sale", "this domain is for sale",
             "available at auction", "expired domain", "make an offer",
-            "register or transfer", "build your website", "dynadot", "sedo", "dan.com", "afternic"
+            "register or transfer", "build your website", "coming soon",
+            "website is for sale", "purchase this domain", "parked"
+        ]
+        landing_hosts = ["sedo.com", "dan.com", "dynadot.com", "afternic.com", "godaddy.com", "porkbun.com"]
+
+        if any(kw in html for kw in landing_keywords) or \
+           any(h in full_url for h in landing_hosts):
+            result["Status"] = "📄 Landing Page"
+            result["Reasoning"].append("Sale/parked/coming soon keywords or domain hosts matched.")
+            return result
+
+        # Live site detection logic
+        indicators = [
+            len(soup.find_all("nav")) > 0,
+            len(soup.find_all("header")) > 0,
+            len(soup.find_all("footer")) > 0,
+            len(soup.find_all("a")) > 10,
+            any(term in body_text for term in ["login", "signup", "blog", "product", "contact", "about us"])
         ]
 
-        if any(kw in title for kw in sale_keywords) or \
-           any(kw in body_text for kw in sale_keywords) or \
-           any(salehost in full_url for salehost in ["sedo.com", "dan.com", "dynadot.com", "afternic.com"]):
-            result["Status"] = "🔴 For Sale (Lander)"
-            result["Confidence"] = 96
-            result["Reasoning"].append("• Sale-related keywords or marketplace URL found")
-            result["WhyNot100"].append("• Minimal page structure (no nav/content)")
+        if any(indicators):
+            result["Status"] = "✅ Live Site"
+            result["Reasoning"].append("Detected navigation, footer/header, or relevant content.")
             return result
 
-        if len(soup.find_all("nav")) > 0 or \
-           "blog" in body_text or \
-           "product" in body_text or \
-           len(soup.find_all("a")) > 5:
-            result["Status"] = "🟢 Live Website"
-            result["Confidence"] = 91
-            result["Reasoning"].append("• Site has navigation, links, or product/blog content")
-            result["WhyNot100"].append("• Some auto-generated content detected")
-            return result
-
-        if res.status_code in [200, 403, 404] and (not soup.body or len(body_text.strip()) < 100):
-            result["Status"] = "🔒 Taken (No Site)"
-            result["Confidence"] = 90
-            result["Reasoning"].append("• Domain is registered but site shows no real content")
-            result["WhyNot100"].append("• Could be misconfigured or intentionally blank")
-            return result
-
-        result["Reasoning"].append("• No clear indicators found in title/body")
-        result["WhyNot100"].append("• Lacks nav or sale/brand keywords")
+        # If content exists but no strong indicators
+        if len(body_text.strip()) > 50:
+            result["Status"] = "❓ Need Manual Check"
+            result["Reasoning"].append("Content found but lacks strong structure to classify.")
+        else:
+            result["Status"] = "❓ Need Manual Check"
+            result["Reasoning"].append("No significant content detected.")
 
     except Exception as e:
-        result["Reasoning"].append(f"• Error fetching domain: {str(e)}")
+        result["Status"] = "❓ Need Manual Check"
+        result["Reasoning"].append(f"Exception occurred: {str(e)}")
 
     return result
 
@@ -82,11 +90,10 @@ def analyze_domain(domain):
 def index():
     result = None
     if request.method == "POST":
-        domain = request.form["domain"]
+        domain = request.form["domain"].strip().replace("https://", "").replace("http://", "").rstrip("/")
         result = analyze_domain(domain)
     return render_template("index.html", result=result)
 
 
 # if __name__ == "__main__":
-#     app.run(debug=False, host='0.0.0.0', port=5000)
-
+#     app.run(debug=False, host='0.0.0.0', port=5001)
